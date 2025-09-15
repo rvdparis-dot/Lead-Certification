@@ -58,7 +58,7 @@
         );
 
         const LeadCertificationScraper = () => {
-            const [opaNumber, setOpaNumber] = useState('');
+            const [searchInput, setSearchInput] = useState('');
             const [loading, setLoading] = useState(false);
             const [result, setResult] = useState(null);
             const [error, setError] = useState(null);
@@ -66,15 +66,48 @@
             // CORRECT API configuration - the working ArcGIS endpoint
             const ARCGIS_API_URL = 'https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/lhhp_lead_certifications/FeatureServer/0/query';
             
-            const validateOPA = (opa) => {
-                const cleanOPA = opa.replace(/[^0-9]/g, '');
-                return cleanOPA.length >= 8 && cleanOPA.length <= 10;
+            const validateInput = (input) => {
+                const cleanInput = input.trim();
+                if (!cleanInput) return false;
+                
+                // Check if it's an OPA number (8-10 digits)
+                const cleanOPA = cleanInput.replace(/[^0-9]/g, '');
+                if (cleanOPA.length >= 8 && cleanOPA.length <= 10 && cleanOPA === cleanInput.replace(/[^0-9]/g, '')) {
+                    return 'opa';
+                }
+                
+                // Otherwise treat as address (at least 3 characters)
+                if (cleanInput.length >= 3) {
+                    return 'address';
+                }
+                
+                return false;
             };
 
-            const buildOPAQuery = (opaNumber) => {
-                const cleanOPA = opaNumber.replace(/[^0-9]/g, '');
-                // CORRECT field name is 'opa_account' (not opa_account_num)
-                return `opa_account = '${cleanOPA}' OR opa_account = '${cleanOPA.padStart(10, '0')}'`;
+            const extractStreetName = (address) => {
+                // Remove common prefixes and suffixes to extract core street name
+                const cleanAddr = address.toUpperCase()
+                    .replace(/^\d+\s+/, '') // Remove house number
+                    .replace(/\b(N|S|E|W|NORTH|SOUTH|EAST|WEST)\b\s*/g, '') // Remove directions
+                    .replace(/\b(ST|STREET|AVE|AVENUE|RD|ROAD|BLVD|BOULEVARD|LN|LANE|DR|DRIVE|CT|COURT|PL|PLACE)\b\s*$/g, '') // Remove suffixes
+                    .trim();
+                
+                return cleanAddr;
+            };
+
+            const buildSearchQuery = (searchInput) => {
+                const inputType = validateInput(searchInput);
+                
+                if (inputType === 'opa') {
+                    const cleanOPA = searchInput.replace(/[^0-9]/g, '');
+                    return `opa_account = '${cleanOPA}' OR opa_account = '${cleanOPA.padStart(10, '0')}'`;
+                } else if (inputType === 'address') {
+                    const streetName = extractStreetName(searchInput);
+                    // Use UPPER and LIKE for case-insensitive partial matching
+                    return `UPPER(address) LIKE UPPER('%${streetName}%')`;
+                }
+                
+                return null;
             };
 
             const executeArcGISQuery = async (query) => {
@@ -127,21 +160,22 @@
             };
 
             const handleSearch = async () => {
-                console.log('=== STARTING REAL DATA SEARCH ===');
-                console.log('OPA Number:', opaNumber);
+                console.log('=== STARTING SEARCH ===');
+                console.log('Search input:', searchInput);
                 
                 setError(null);
                 setResult(null);
                 
-                if (!validateOPA(opaNumber)) {
-                    setError('Please enter a valid OPA number (8-10 digits).');
+                const inputType = validateInput(searchInput);
+                if (!inputType) {
+                    setError('Please enter a valid OPA account number (8-10 digits) or address (e.g., "1234 Market St").');
                     return;
                 }
                 
                 setLoading(true);
                 
                 try {
-                    const query = buildOPAQuery(opaNumber);
+                    const query = buildSearchQuery(searchInput);
                     console.log('Executing ArcGIS query:', query);
                     
                     const data = await executeArcGISQuery(query);
@@ -152,20 +186,23 @@
                         console.log('Data:', certData);
                         setResult(certData);
                     } else {
-                        console.log('No data found for OPA:', opaNumber);
-                        setError('Unknown OPA number - no property record found in the Philadelphia database');
+                        if (inputType === 'opa') {
+                            setError('Unknown OPA number - no property record found in the Philadelphia database');
+                        } else {
+                            setError('Address not found - no property record found in the Philadelphia database');
+                        }
                     }
                     
                 } catch (err) {
                     console.error('Search failed:', err);
-                    setError(err.message || 'Failed to connect to OpenDataPhilly.org');
+                    setError(err.message || 'Failed to connect to Philadelphia database');
                 } finally {
                     setLoading(false);
                 }
             };
 
             const handleReset = () => {
-                setOpaNumber('');
+                setSearchInput('');
                 setResult(null);
                 setError(null);
             };
@@ -259,20 +296,6 @@
                                 </button>
                             </div>
 
-                            {/* Success Message */}
-                            <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-                                <div className="flex items-start gap-2">
-                                    <CheckCircle className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
-                                    <div>
-                                        <p className="text-green-800 text-sm font-medium">Connected to Real Philadelphia Database</p>
-                                        <p className="text-green-700 text-xs mt-1">
-                                            Using the verified ArcGIS API endpoint that returned live data when tested. 
-                                            This should now work with real Philadelphia lead certification records!
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-
                             {/* Results Display */}
                             {error && (
                                 <div className="mt-6 flex items-center gap-2 rounded-lg border border-red-400 bg-red-50 p-4 text-red-700">
@@ -303,7 +326,7 @@
                                     <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-6 text-sm">
                                         <div>
                                             <span className="font-medium text-gray-500">OPA Number:</span>
-                                            <p className="text-gray-900">{result.opa_account || result.opa_account_num || 'Not available'}</p>
+                                            <p className="text-gray-900">{result.opa_account || 'Not available'}</p>
                                         </div>
                                         <div>
                                             <span className="font-medium text-gray-500">Address:</span>
