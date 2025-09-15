@@ -130,7 +130,7 @@
 const executeArcGISQuery = async (query) => {
     try {
         // Use your deployed proxy instead of direct API call
-        const PROXY_URL = 'https://your-app.vercel.app/api/openphilly-proxy'; // Update this URL
+        const PROXY_URL = 'https://lead-certification.vercel.app/api/openphilly-proxy'; // Update this URL
         
         const url = `${PROXY_URL}?query=${encodeURIComponent(query)}`;
         
