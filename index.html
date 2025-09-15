@@ -122,54 +122,65 @@
                 return null;
             };
 
-            const executeArcGISQuery = async (query) => {
-                try {
-                    const url = `${ARCGIS_API_URL}?where=${encodeURIComponent(query)}&outFields=*&f=json`;
-                    
-                    console.log('=== ARCGIS API CALL ===');
-                    console.log('Query:', query);
-                    console.log('Full URL:', url);
-                    
-                    const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 15000);
-                    
-                    const response = await fetch(url, {
-                        method: 'GET',
-                        signal: controller.signal,
-                        headers: {
-                            'Accept': 'application/json',
-                            'User-Agent': 'LeadComplianceChecker/1.0'
-                        }
-                    });
-                    
-                    clearTimeout(timeoutId);
-                    
-                    if (!response.ok) {
-                        const errorText = await response.text();
-                        console.error('ArcGIS API Error Response:', errorText);
-                        throw new Error(`API returned ${response.status}: ${response.statusText}`);
-                    }
-                    
-                    const data = await response.json();
-                    console.log('=== ARCGIS API RESPONSE ===');
-                    console.log('Response:', JSON.stringify(data, null, 2));
-                    
-                    if (data.error) {
-                        throw new Error(`ArcGIS API Error: ${data.error.message || 'Unknown API Error'}`);
-                    }
-                    
-                    return data;
-                    
-                } catch (error) {
-                    console.error('=== ARCGIS API ERROR ===');
-                    console.error('Error details:', error);
-                    
-                    if (error.name === 'AbortError') {
-                        throw new Error('Search timed out - the API may be slow. Please try again.');
-                    }
-                    throw error;
-                }
-            };
+           / ================================
+// UPDATE YOUR HTML FILE:
+// Replace the executeArcGISQuery function with this version:
+// ================================
+
+const executeArcGISQuery = async (query) => {
+    try {
+        // Use your deployed proxy instead of direct API call
+        const PROXY_URL = 'https://your-app.vercel.app/api/openphilly-proxy'; // Update this URL
+        
+        const url = `${PROXY_URL}?query=${encodeURIComponent(query)}`;
+        
+        console.log('=== PROXY API CALL ===');
+        console.log('Query:', query);
+        console.log('Proxy URL:', url);
+        
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
+        
+        const response = await fetch(url, {
+            method: 'GET',
+            signal: controller.signal,
+            headers: {
+                'Accept': 'application/json'
+            }
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Proxy API Error Response:', errorText);
+            throw new Error(`Proxy returned ${response.status}: ${response.statusText}`);
+        }
+        
+        const result = await response.json();
+        console.log('=== PROXY API RESPONSE ===');
+        console.log('Success:', result.success);
+        console.log('Data count:', result.metadata?.count || 0);
+        
+        if (!result.success) {
+            throw new Error(result.error || 'Unknown proxy error');
+        }
+        
+        // Convert back to ArcGIS format for compatibility
+        return {
+            features: result.data
+        };
+        
+    } catch (error) {
+        console.error('=== PROXY API ERROR ===');
+        console.error('Error details:', error);
+        
+        if (error.name === 'AbortError') {
+            throw new Error('Search timed out - please try again.');
+        }
+        throw error;
+    }
+};
 
             const handleSearch = async () => {
                 console.log('=== STARTING SEARCH ===');
