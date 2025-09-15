@@ -84,15 +84,21 @@
                 return false;
             };
 
-            const extractStreetName = (address) => {
-                // Remove common prefixes and suffixes to extract core street name
-                const cleanAddr = address.toUpperCase()
+            const extractAddressComponents = (address) => {
+                const cleanAddr = address.trim().toUpperCase();
+                
+                // Extract house number (if present)
+                const houseNumberMatch = cleanAddr.match(/^(\d+)\s+/);
+                const houseNumber = houseNumberMatch ? houseNumberMatch[1] : null;
+                
+                // Extract street name (remove house number, directions, and suffixes)
+                let streetName = cleanAddr
                     .replace(/^\d+\s+/, '') // Remove house number
                     .replace(/\b(N|S|E|W|NORTH|SOUTH|EAST|WEST)\b\s*/g, '') // Remove directions
                     .replace(/\b(ST|STREET|AVE|AVENUE|RD|ROAD|BLVD|BOULEVARD|LN|LANE|DR|DRIVE|CT|COURT|PL|PLACE)\b\s*$/g, '') // Remove suffixes
                     .trim();
                 
-                return cleanAddr;
+                return { houseNumber, streetName };
             };
 
             const buildSearchQuery = (searchInput) => {
@@ -102,9 +108,15 @@
                     const cleanOPA = searchInput.replace(/[^0-9]/g, '');
                     return `opa_account = '${cleanOPA}' OR opa_account = '${cleanOPA.padStart(10, '0')}'`;
                 } else if (inputType === 'address') {
-                    const streetName = extractStreetName(searchInput);
-                    // Use UPPER and LIKE for case-insensitive partial matching
-                    return `UPPER(address) LIKE UPPER('%${streetName}%')`;
+                    const { houseNumber, streetName } = extractAddressComponents(searchInput);
+                    
+                    if (houseNumber && streetName) {
+                        // Search for specific house number + street name
+                        return `UPPER(address) LIKE UPPER('${houseNumber}%${streetName}%')`;
+                    } else if (streetName) {
+                        // If no house number, search by street name only
+                        return `UPPER(address) LIKE UPPER('%${streetName}%')`;
+                    }
                 }
                 
                 return null;
