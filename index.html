@@ -63,8 +63,8 @@
             const [result, setResult] = useState(null);
             const [error, setError] = useState(null);
 
-            // CORRECT API configuration - the working ArcGIS endpoint
-            const ARCGIS_API_URL = 'https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/lhhp_lead_certifications/FeatureServer/0/query';
+            // CORRECT PROXY URL for your deployed app
+            const PROXY_URL = 'https://lead-certification.vercel.app/api/openphilly-proxy';
             
             const validateInput = (input) => {
                 const cleanInput = input.trim();
@@ -122,65 +122,63 @@
                 return null;
             };
 
-           / ================================
-// UPDATE YOUR HTML FILE:
-// Replace the executeArcGISQuery function with this version:
-// ================================
-
-const executeArcGISQuery = async (query) => {
-    try {
-        // Use your deployed proxy instead of direct API call
-        const PROXY_URL = 'https://lead-certification.vercel.app/api/openphilly-proxy'; // Update this URL
-        
-        const url = `${PROXY_URL}?query=${encodeURIComponent(query)}`;
-        
-        console.log('=== PROXY API CALL ===');
-        console.log('Query:', query);
-        console.log('Proxy URL:', url);
-        
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000);
-        
-        const response = await fetch(url, {
-            method: 'GET',
-            signal: controller.signal,
-            headers: {
-                'Accept': 'application/json'
-            }
-        });
-        
-        clearTimeout(timeoutId);
-        
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error('Proxy API Error Response:', errorText);
-            throw new Error(`Proxy returned ${response.status}: ${response.statusText}`);
-        }
-        
-        const result = await response.json();
-        console.log('=== PROXY API RESPONSE ===');
-        console.log('Success:', result.success);
-        console.log('Data count:', result.metadata?.count || 0);
-        
-        if (!result.success) {
-            throw new Error(result.error || 'Unknown proxy error');
-        }
-        
-        // Convert back to ArcGIS format for compatibility
-        return {
-            features: result.data
-        };
-        
-    } catch (error) {
-        console.error('=== PROXY API ERROR ===');
-        console.error('Error details:', error);
-        
-        if (error.name === 'AbortError') {
-            throw new Error('Search timed out - please try again.');
-        }
-        throw error;
-    }
-};
+            const executeProxyQuery = async (query) => {
+                try {
+                    const url = `${PROXY_URL}?query=${encodeURIComponent(query)}`;
+                    
+                    console.log('=== PROXY API CALL ===');
+                    console.log('Query:', query);
+                    console.log('Proxy URL:', url);
+                    console.log('User Agent:', navigator.userAgent);
+                    
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => {
+                        console.log('Request timed out');
+                        controller.abort();
+                    }, 45000); // 45 seconds timeout for mobile
+                    
+                    const response = await fetch(url, {
+                        method: 'GET',
+                        signal: controller.signal,
+                        headers: {
+                            'Accept': 'application/json'
+                        }
+                    });
+                    
+                    clearTimeout(timeoutId);
+                    
+                    console.log('=== PROXY RESPONSE ===');
+                    console.log('Status:', response.status);
+                    console.log('Headers:', Object.fromEntries(response.headers.entries()));
+                    
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        console.error('Proxy API Error Response:', errorText);
+                        throw new Error(`Proxy returned ${response.status}: ${response.statusText} - ${errorText}`);
+                    }
+                    
+                    const data = await response.json();
+                    console.log('Proxy response data:', data);
+                    
+                    if (!data.success) {
+                        throw new Error(data.error || 'Proxy returned an error');
+                    }
+                    
+                    // Convert to expected format
+                    return {
+                        features: data.data || []
+                    };
+                    
+                } catch (error) {
+                    console.error('=== PROXY API ERROR ===');
+                    console.error('Error details:', error);
+                    
+                    if (error.name === 'AbortError') {
+                        throw new Error('Search timed out - please try again.');
+                    }
+                    throw error;
+                }
+            };
 
             const handleSearch = async () => {
                 console.log('=== STARTING SEARCH ===');
@@ -199,12 +197,12 @@ const executeArcGISQuery = async (query) => {
                 
                 try {
                     const query = buildSearchQuery(searchInput);
-                    console.log('Executing ArcGIS query:', query);
+                    console.log('Executing proxy query:', query);
                     
-                    const data = await executeArcGISQuery(query);
+                    const data = await executeProxyQuery(query);
                     
                     if (data && data.features && data.features.length > 0) {
-                        const certData = data.features[0].attributes;
+                        const certData = data.features[0].attributes || data.features[0];
                         console.log('=== CERTIFICATION DATA FOUND ===');
                         console.log('Data:', certData);
                         setResult(certData);
@@ -405,6 +403,9 @@ const executeArcGISQuery = async (query) => {
                         <div className="bg-gray-50 px-6 py-4 rounded-b-lg border-t border-gray-200">
                             <p className="text-sm text-gray-600">
                                 <strong>Data Source:</strong> Philadelphia Lead Hazard Healthy Homes Program
+                            </p>
+                            <p className="text-xs text-gray-500 mt-1">
+                                App: lead-certification.vercel.app | Proxy Status: Connected
                             </p>
                         </div>
                     </div>
