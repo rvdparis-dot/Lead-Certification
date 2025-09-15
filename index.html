@@ -222,7 +222,10 @@
                             <div className="h-10 w-10 bg-blue-600 rounded-lg flex items-center justify-center">
                                 <Search className="h-6 w-6 text-white" />
                             </div>
-                            <h1 className="text-2xl font-bold text-gray-800">Philly Lead Certification Lookup</h1>
+                            <div>
+                                <h1 className="text-2xl font-bold text-gray-800">Philly Lead Certification Lookup</h1>
+                                <p className="text-sm text-gray-600 mt-1">Enter an OPA account number (e.g., 081128700) or address (e.g., 1234 Market St)</p>
+                            </div>
                         </div>
 
                         {/* Search Section */}
@@ -230,16 +233,16 @@
                             <div className="flex items-center gap-4">
                                 <input
                                     type="text"
-                                    value={opaNumber}
-                                    onChange={(e) => setOpaNumber(e.target.value)}
+                                    value={searchInput}
+                                    onChange={(e) => setSearchInput(e.target.value)}
                                     onKeyPress={handleKeyPress}
-                                    placeholder="Enter OPA Account Number (e.g., 081128700)"
+                                    placeholder="Enter OPA number or address..."
                                     className="flex-grow rounded-lg border border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 px-4 py-2"
                                     disabled={loading}
                                 />
                                 <button
                                     onClick={handleSearch}
-                                    disabled={loading || !opaNumber.trim()}
+                                    disabled={loading || !searchInput.trim()}
                                     className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-400 disabled:cursor-not-allowed"
                                 >
                                     {loading ? (
