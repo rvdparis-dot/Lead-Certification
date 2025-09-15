@@ -73,8 +73,8 @@
 
             const buildOPAQuery = (opaNumber) => {
                 const cleanOPA = opaNumber.replace(/[^0-9]/g, '');
-                // ArcGIS WHERE clause format
-                return `opa_account_num = '${cleanOPA}' OR opa_account_num = '${cleanOPA.padStart(10, '0')}'`;
+                // CORRECT field name is 'opa_account' (not opa_account_num)
+                return `opa_account = '${cleanOPA}' OR opa_account = '${cleanOPA.padStart(10, '0')}'`;
             };
 
             const executeArcGISQuery = async (query) => {
