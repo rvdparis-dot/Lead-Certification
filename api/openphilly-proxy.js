@@ -1,134 +1,134 @@
 // FILE: api/openphilly-proxy.js
-// Deploy this to Vercel to create a mobile-friendly proxy
+// This file should be saved as: api/openphilly-proxy.js in your Vercel project
 
 export default async function handler(req, res) {
     // Enable CORS for all origins
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
     
+    // Handle preflight requests
     if (req.method === 'OPTIONS') {
         return res.status(200).end();
+    }
+    
+    // Only allow GET requests
+    if (req.method !== 'GET') {
+        return res.status(405).json({
+            success: false,
+            error: 'Method not allowed. Use GET.'
+        });
     }
     
     try {
         const { query } = req.query;
         
+        // Validate query parameter
         if (!query) {
             return res.status(400).json({
                 success: false,
-                error: 'Query parameter is required'
+                error: 'Query parameter is required. Example: ?query=opa_account=\'123456789\''
             });
         }
+        
+        // Log the incoming request
+        console.log('=== PROXY REQUEST ===');
+        console.log('Query:', query);
+        console.log('User Agent:', req.headers['user-agent']);
+        console.log('Origin:', req.headers.origin);
         
         // ArcGIS API configuration
         const ARCGIS_API_URL = 'https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/lhhp_lead_certifications/FeatureServer/0/query';
         
+        // Build the URL parameters
         const params = new URLSearchParams({
             where: query,
             outFields: '*',
             f: 'json',
-            returnGeometry: 'false'
+            returnGeometry: 'false',
+            maxRecordCount: '100'
         });
         
-        const url = `${ARCGIS_API_URL}?${params.toString()}`;
+        const fullUrl = `${ARCGIS_API_URL}?${params.toString()}`;
         
-        console.log('Proxy API call:', url);
+        console.log('=== MAKING REQUEST TO ARCGIS ===');
+        console.log('Full URL:', fullUrl);
         
-        // Make the request from server-side (no CORS issues)
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: {
-                'Accept': 'application/json',
-                'User-Agent': 'PhiladelphiaLeadTracker/1.0'
-            },
-            timeout: 30000
-        });
-        
-        if (!response.ok) {
-            throw new Error(`ArcGIS API returned ${response.status}: ${response.statusText}`);
-        }
-        
-        const data = await response.json();
-        
-        if (data.error) {
-            throw new Error(`ArcGIS API Error: ${data.error.message}`);
-        }
-        
-        return res.status(200).json({
-            success: true,
-            data: data.features || [],
-            metadata: {
-                count: data.features ? data.features.length : 0,
-                timestamp: new Date().toISOString()
-            }
-        });
-        
-    } catch (error) {
-        console.error('Proxy error:', error);
-        return res.status(500).json({
-            success: false,
-            error: error.message || 'Internal server error'
-        });
-    }
-}
-
-// ================================
-// UPDATE YOUR HTML FILE:
-// Replace the executeArcGISQuery function with this version:
-// ================================
-
-const executeArcGISQuery = async (query) => {
-    try {
-        // Use your deployed proxy instead of direct API call
-        const PROXY_URL = 'https://your-app.vercel.app/api/openphilly-proxy'; // Update this URL
-        
-        const url = `${PROXY_URL}?query=${encodeURIComponent(query)}`;
-        
-        console.log('=== PROXY API CALL ===');
-        console.log('Query:', query);
-        console.log('Proxy URL:', url);
-        
+        // Make the request to ArcGIS API
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000);
+        const timeoutId = setTimeout(() => controller.abort(), 25000); // 25 second timeout
         
-        const response = await fetch(url, {
+        const response = await fetch(fullUrl, {
             method: 'GET',
             signal: controller.signal,
             headers: {
-                'Accept': 'application/json'
+                'Accept': 'application/json',
+                'User-Agent': 'PhiladelphiaLeadTracker/1.0 (Vercel Proxy)'
             }
         });
         
         clearTimeout(timeoutId);
         
+        console.log('=== ARCGIS RESPONSE ===');
+        console.log('Status:', response.status);
+        console.log('Headers:', Object.fromEntries(response.headers.entries()));
+        
+        // Check if response is OK
         if (!response.ok) {
             const errorText = await response.text();
-            console.error('Proxy API Error Response:', errorText);
-            throw new Error(`Proxy returned ${response.status}: ${response.statusText}`);
+            console.error('ArcGIS API Error:', errorText);
+            throw new Error(`ArcGIS API returned ${response.status}: ${response.statusText}`);
         }
         
-        const result = await response.json();
-        console.log('=== PROXY API RESPONSE ===');
-        console.log('Success:', result.success);
-        console.log('Data count:', result.metadata?.count || 0);
+        // Parse the JSON response
+        const data = await response.json();
         
-        if (!result.success) {
-            throw new Error(result.error || 'Unknown proxy error');
+        console.log('=== ARCGIS DATA RECEIVED ===');
+        console.log('Features count:', data.features ? data.features.length : 0);
+        
+        // Check for API errors in the response
+        if (data.error) {
+            console.error('ArcGIS API Error in response:', data.error);
+            throw new Error(`ArcGIS API Error: ${data.error.message || 'Unknown error'}`);
         }
         
-        // Convert back to ArcGIS format for compatibility
-        return {
-            features: result.data
-        };
+        // Return successful response
+        return res.status(200).json({
+            success: true,
+            data: data.features || [],
+            metadata: {
+                count: data.features ? data.features.length : 0,
+                timestamp: new Date().toISOString(),
+                query: query,
+                source: 'OpenPhilly ArcGIS API'
+            }
+        });
         
     } catch (error) {
-        console.error('=== PROXY API ERROR ===');
-        console.error('Error details:', error);
+        console.error('=== PROXY ERROR ===');
+        console.error('Error name:', error.name);
+        console.error('Error message:', error.message);
+        console.error('Error stack:', error.stack);
+        
+        let errorMessage = 'Internal server error';
+        let statusCode = 500;
         
         if (error.name === 'AbortError') {
-            throw new Error('Search timed out - please try again.');
+            errorMessage = 'Request timed out while connecting to Philadelphia database';
+            statusCode = 504;
+        } else if (error.message.includes('fetch')) {
+            errorMessage = 'Failed to connect to Philadelphia database';
+            statusCode = 502;
+        } else if (error.message.includes('ArcGIS')) {
+            errorMessage = error.message;
+            statusCode = 502;
         }
-        throw error;
+        
+        return res.status(statusCode).json({
+            success: false,
+            error: errorMessage,
+            details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+            timestamp: new Date().toISOString()
+        });
     }
-};
+}
